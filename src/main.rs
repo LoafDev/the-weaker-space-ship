@@ -1,13 +1,14 @@
 use macroquad::{
     prelude::*,
-    ui::{root_ui, Skin}
+    ui::{root_ui, Skin},
+    rand::gen_range
 };
-use rand::gen_range;
 
+type A = f32;
 
 const MAX_SCORE: u8 = 20;
 const PLAYER_LIFE: u8 = 10;
-const MAX_BULLET: u8 = 200;
+const MAX_BULLET: u8 = 2;
 const MAX_ENEMY: u8 = 10;
 const SCREEN_WIDTH: f32 = 800.;
 const SCREEN_HEIGHT: f32 = 600.;
@@ -60,6 +61,7 @@ struct Game {
     exit: bool
 }
 
+//initialize game
 impl Default for Game {
     fn default() -> Self {
         let mut bullet = Vec::new();
@@ -101,6 +103,7 @@ fn windows_init() -> Conf {
 async fn main() {
     let mut game = Game::default();
 
+    //initialize buttons' skin
     let skin = {
         let button_style = root_ui()
         .style_builder()
@@ -116,11 +119,12 @@ async fn main() {
 
     root_ui().push_skin(&skin);
     
+    //main game loop
     loop {
         update(&mut game);
         draw(&game);
         
-        if game.exit {break;}
+        if game.exit || is_key_down(KeyCode::Escape) {break;}
         
         next_frame().await;
     }
@@ -132,14 +136,14 @@ fn init_game(game: &mut Game) {
     //initialize player
     game.player.pos = Vec2::new(SCREEN_WIDTH / 2., SCREEN_HEIGHT - 50.);
     game.player.size = Vec2::new(20., 20.);
-    game.player.speed = 10.;
+    game.player.speed = 7.;
     game.player.health = PLAYER_LIFE;
 
     //initialize bullets
     for bullets in &mut game.bullet {
         bullets.pos = Vec2::default();
         bullets.size = Vec2::new(5., 15.);
-        bullets.speed = 10.;
+        bullets.speed = 30.;
         bullets.active = false;
     }
 
@@ -159,25 +163,24 @@ fn init_game(game: &mut Game) {
     game.superultradupermegacoolshootingobjectforabsolutelynoreasonatall.pos = Vec2::new(SCREEN_WIDTH / 2., 50.);
     game.superultradupermegacoolshootingobjectforabsolutelynoreasonatall.health = 10;
     game.superultradupermegacoolshootingobjectforabsolutelynoreasonatall.size = Vec2::new(30., 30.);
-    game.superultradupermegacoolshootingobjectforabsolutelynoreasonatall.speed = 10.;
+    game.superultradupermegacoolshootingobjectforabsolutelynoreasonatall.speed = 5.;
 }
 
 fn update(game: &mut Game) {
     match game.gamestate {
         GameState::Menu => {
-            if is_key_down(KeyCode::Escape) {game.exit = true;}
-
+            //buttons' position
             let play_pos = Vec2::new(100., 150.);
             let credit_pos = Vec2::new(100., 200.);
             let quit_pos = Vec2::new(100., 250.);
-
+            
+            //draw buttons
             if root_ui().button(play_pos, "Play") {init_game(game); game.gamestate = GameState::InGame;}
             if root_ui().button(credit_pos, "Credit") {game.gamestate = GameState::Credit;}
             if root_ui().button(quit_pos, "Quit") {game.exit = true;}
         }
 
         GameState::Credit => {
-            if is_key_down(KeyCode::Escape) {game.exit = true;}
             if root_ui().button(vec2(SCREEN_WIDTH / 2., SCREEN_HEIGHT - 200.), "Back to menu") {game.gamestate = GameState::Menu;}
         }
 
@@ -192,7 +195,7 @@ fn update(game: &mut Game) {
             if is_key_pressed(KeyCode::Space) {
                 for bullets in &mut game.bullet {
                     if !bullets.active {
-                        bullets.pos = game.player.pos;
+                        bullets.pos = Vec2::new(game.player.pos.x + (game.player.size.x / 2.) - 1., game.player.pos.y);
 
                         bullets.active = true;
 
@@ -218,14 +221,16 @@ fn update(game: &mut Game) {
                         bullets.active = false;
                     }
 
-                    if game.superultradupermegacoolshootingobjectforabsolutelynoreasonatall.health > 0 && game.score >= 10 && game.superultradupermegacoolshootingobjectforabsolutelynoreasonatall.pos.y < bullets.pos.y + bullets.size.y && bullets.pos.y < game.superultradupermegacoolshootingobjectforabsolutelynoreasonatall.pos.y + game.superultradupermegacoolshootingobjectforabsolutelynoreasonatall.size.y && bullets.pos.x < game.superultradupermegacoolshootingobjectforabsolutelynoreasonatall.pos.x + game.superultradupermegacoolshootingobjectforabsolutelynoreasonatall.size.x && game.superultradupermegacoolshootingobjectforabsolutelynoreasonatall.pos.x < bullets.pos.x + bullets.size.x {
+                    //collision with that thing
+                    if game.superultradupermegacoolshootingobjectforabsolutelynoreasonatall.health > 0 && game.score >= 10 && collision(&game.superultradupermegacoolshootingobjectforabsolutelynoreasonatall.pos.x, &game.superultradupermegacoolshootingobjectforabsolutelynoreasonatall.pos.y, &game.superultradupermegacoolshootingobjectforabsolutelynoreasonatall.size.x, &game.superultradupermegacoolshootingobjectforabsolutelynoreasonatall.size.y, &bullets.pos.x, &bullets.pos.y, &bullets.size.x, &bullets.size.y) {
                         bullets.pos = Vec2::default();
                         bullets.active = false;
                         game.superultradupermegacoolshootingobjectforabsolutelynoreasonatall.health -= 1;
                     }
 
+                    //collision with enemies
                     for enemies in &mut game.enemy {
-                        if enemies.active && enemies.pos.x < bullets.pos.x + bullets.size.x && bullets.pos.x < enemies.pos.x + enemies.size.x && enemies.pos.y < bullets.pos.y + bullets.size.y && bullets.pos.y < enemies.pos.y + enemies.size.y {
+                        if enemies.active && collision(&enemies.pos.x, &enemies.pos.y, &enemies.size.x, &enemies.size.y, &bullets.pos.x, &bullets.pos.y, &bullets.size.x, &bullets.size.y) {
                             bullets.pos = Vec2::default();
                             bullets.active = false;
                             game.score += 1;
@@ -235,6 +240,7 @@ fn update(game: &mut Game) {
                 }
             }
 
+            //that thing's movement
             if game.superultradupermegacoolshootingobjectforabsolutelynoreasonatall.health > 0 && game.score >= 10 {
                 if game.superultradupermegacoolshootingobjectforabsolutelynoreasonatall.pos.x > SCREEN_WIDTH - 20. {game.superultradupermegacoolshootingobjectforabsolutelynoreasonatall.speed *= -1.;}
                 if game.superultradupermegacoolshootingobjectforabsolutelynoreasonatall.pos.x < 0. {game.superultradupermegacoolshootingobjectforabsolutelynoreasonatall.speed *= -1.;}
@@ -242,6 +248,7 @@ fn update(game: &mut Game) {
                 game.superultradupermegacoolshootingobjectforabsolutelynoreasonatall.pos.x += game.superultradupermegacoolshootingobjectforabsolutelynoreasonatall.speed;
             } else if game.superultradupermegacoolshootingobjectforabsolutelynoreasonatall.health <= 0 {game.score += 10;}
 
+            //winning condition
             if game.score >= MAX_SCORE {
                 game.gamestate = GameState::EndGame;
             }
@@ -256,17 +263,19 @@ fn update(game: &mut Game) {
 
 fn draw(game: &Game) {
     match game.gamestate {
-
+        //Menu screen
         GameState::Menu => {
             clear_background(WHITE);
             draw_text("HEllo idiots!", 100., 100., 20., BLUE);
         }
 
+        //Credit screen
         GameState::Credit => {
             clear_background(YELLOW);
             draw_text("Game made by me: Loaf", SCREEN_WIDTH / 2., SCREEN_HEIGHT / 2., 30., GREEN);
         }
 
+        //Ingame screen
         GameState::InGame => {
             clear_background(BLUE);
 
@@ -297,10 +306,17 @@ fn draw(game: &Game) {
         }
 
         GameState::EndGame => {
+            //Win screen
             clear_background(RED);
             draw_text("ok", 100., 100., 20., BLACK);
             draw_text("You won or something like that I don't know lol", 100., 150., 20., BLUE);
             draw_text("Or", 150., 250., 20., YELLOW);
         }
     }
+}
+
+//check for collision
+fn collision(x: &A, y: &A, z: &A, t: &A, a: &A, b: &A, c: &A, d: &A) -> bool {
+    if *x < *a + *c && *y < *b + *d && *a < *x + *z && *b < *y + *t {true}
+    else {false}
 }
